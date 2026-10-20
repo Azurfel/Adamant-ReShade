@@ -1,143 +1,73 @@
 #include "ReShade.fxh"
 
-// A shader that tries to emulate a sony PVM type aperture grille screen but with full brightness.
-//
-// The novel thing about this shader is that it relies on the HDR shaders to brighten up the image so that when 
-// we apply this shader which emulates the apperture grille the resulting screen isn't left too dark.  
-//
-// I think you need at least a DisplayHDR 600 monitor but to get close to CRT levels of brightness I think DisplayHDR 1000.
-// 
-// Please Enable HDR in RetroArch 1.10+
-// 
-// NOTE: when this shader is envoked the Contrast, Peak Luminance and Paper White Luminance in the HDR menu do nothing instead set those values through the shader parameters 
-// 
-// For this shader set Paper White Luminance to above 700 and Peak Luminance to the peak luminance of your monitor.  
-// 
-// Also try to use a integer scaling - its just better - overscaling is fine.
-// 
-// This shader doesn't do any geometry warping or bouncing of light around inside the screen etc - I think these effects just add unwanted noise, I know people disagree. Please feel free to make you own and add them
-// 
-// Dont use this shader directly - use the hdr\crt-make-model-hdr.slangp where make and model are the make and model of the CRT you want.
-
 //#pragma format A2B10G10R10_UNORM_PACK32
 
+uniform float HCRT_HDR                             <ui_category = "Your Display's Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 1.0;  ui_label = "SDR | HDR";> = 1.0;
+uniform float HCRT_LCD_RESOLUTION                  <ui_category = "Your Display's Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "Display's Resolution: 1080p | 4K | 8K";> = 1.0;
+uniform float HCRT_LCD_SUBPIXEL                    <ui_category = "Your Display's Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "Display's Subpixel Layout: RGB | RWBG (OLED) | BGR";> = 0.0;
 
-// #pragma parameter hcrt_title                         "SONY MEGATRON COLOUR VIDEO MONITOR"                           0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_space0                        " "                                                            0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_support0                      "SDR mode: Turn up your TV's brightness as high as possible"   0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_support1                      "HDR mode: Set the peak luminance to that of your TV."         0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_support2                      "Then adjust paper white luminance until it looks right"       0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_support3                      " "                                                            0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_support4                      "Default white points for the different colour systems:"       0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_support5                      "709: 6500K, PAL: 6500K, NTSC-U: 6500K, NTSC-J: 9300K"         0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_space1                        " "                                                            0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_user_settings                 "YOUR DISPLAY'S SETTINGS:"                                     0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_hdr                           "    SDR | HDR"                                                1.0      0.0   1.0      1.0
-// #pragma parameter hcrt_colour_space                  "    SDR: Display's Colour Space: r709 | sRGB | DCI-P3"        1.0      0.0   2.0      1.0
-// #pragma parameter hcrt_max_nits                      "    HDR: Display's Peak Luminance"                            700.0    0.0   10000.0  10.0
-// #pragma parameter hcrt_paper_white_nits              "    HDR: Display's Paper White Luminance"                     700.0    0.0   10000.0  10.0
-// #pragma parameter hcrt_expand_gamut                  "    HDR: Original/Vivid"                                      0.0      0.0   1.0      1.0
-// #pragma parameter hcrt_lcd_resolution                "    Display's Resolution: 4K | 8K"                            0.0      0.0   1.0      1.0
-// #pragma parameter hcrt_lcd_subpixel                  "    Display's Subpixel Layout: RGB | BGR"                     0.0      0.0   1.0      1.0
-// #pragma parameter hcrt_space2                        " "                                                            0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_developer_settings            "CRT SETTINGS:"                                                0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_crt_screen_type               "    Screen Type: APERTURE GRILLE | SHADOW MASK | SLOT MASK"   0.0      0.0   3.0      1.0
-// #pragma parameter hcrt_crt_resolution                "    Resolution: 300TVL | 600TVL | 800TVL | 1000TVL"           1.0      0.0   3.0      1.0
-// #pragma parameter hcrt_colour_system                 "    Colour System: r709 | PAL | NTSC-U | NTSC-J"              2.0      0.0   3.0      1.0
-// #pragma parameter hcrt_white_temperature             "    White Temperature Offset (Kelvin)"                        0.0      -5000.0  12000.0      100.0
-// #pragma parameter hcrt_brightness                    "    Brightness"                                               0.0      -1.0  1.0      0.01
-// #pragma parameter hcrt_contrast                      "    Contrast"                                                 0.0      -1.0  1.0      0.01
-// #pragma parameter hcrt_saturation                    "    Saturation"                                               0.0      -1.0   1.0     0.01
-// #pragma parameter hcrt_gamma_in                      "    Gamma In"                                                 0.0      -1.0   1.0     0.01
-// #pragma parameter hcrt_gamma_out                     "    Gamma Out"                                                0.0      -0.4   0.4     0.005
-// #pragma parameter hcrt_pin_phase                     "    Pin Phase"                                                0.00    -0.2   0.2      0.01
-// #pragma parameter hcrt_pin_amp                       "    Pin Amp"                                                  0.00    -0.2   0.2      0.01
-// #pragma parameter hcrt_space3                        " "                                                            0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_developer_settings0           "    VERTICAL SETTINGS:"                                       0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_v_size                        "        Vertical Size"                                        1.00     0.8   1.2      0.01
-// #pragma parameter hcrt_v_cent                        "        Vertical Center"                                      0.00  -200.0 200.0      1.0
-// #pragma parameter hcrt_red_vertical_convergence      "        Red Vertical Deconvergence"                           0.00     -10.0 10.0     0.01
-// #pragma parameter hcrt_green_vertical_convergence    "        Green Vertical Deconvergence"                         0.00     -10.0 10.0     0.01
-// #pragma parameter hcrt_blue_vertical_convergence     "        Blue Vertical Deconvergence"                          0.00     -10.0 10.0     0.01
-// #pragma parameter hcrt_red_scanline_min              "        Red Scanline Min"                                     0.50     0.0   2.0      0.01 
-// #pragma parameter hcrt_red_scanline_max              "        Red Scanline Max"                                     1.00     0.0   2.0      0.01 
-// #pragma parameter hcrt_red_scanline_attack           "        Red Scanline Attack"                                  0.20     0.0   1.0      0.01
-// #pragma parameter hcrt_green_scanline_min            "        Green Scanline Min"                                   0.50     0.0   2.0      0.01 
-// #pragma parameter hcrt_green_scanline_max            "        Green Scanline Max"                                   1.00     0.0   2.0      0.01 
-// #pragma parameter hcrt_green_scanline_attack         "        Green Scanline Attack"                                0.20     0.0   1.0      0.01
-// #pragma parameter hcrt_blue_scanline_min             "        Blue Scanline Min"                                    0.50     0.0   2.0      0.01 
-// #pragma parameter hcrt_blue_scanline_max             "        Blue Scanline Max"                                    1.00     0.0   2.0      0.01 
-// #pragma parameter hcrt_blue_scanline_attack          "        Blue Scanline Attack"                                 0.20     0.0   1.0      0.01
-// #pragma parameter hcrt_space4                        " "                                                            0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_developer_settings1           "    HORIZONTAL SETTINGS:"                                     0.0      0.0   0.0001   0.0001
-// #pragma parameter hcrt_h_size                        "        Horizontal Size"                                      1.00     0.8   1.2      0.01
-// #pragma parameter hcrt_h_cent                        "        Horizontal Center"                                    0.00  -200.0 200.0      1.0
-// #pragma parameter hcrt_red_horizontal_convergence    "        Red Horizontal Deconvergence"                         0.00     -10.0 10.0     0.01
-// #pragma parameter hcrt_green_horizontal_convergence  "        Green Horizontal Deconvergence"                       0.00     -10.0 10.0     0.01
-// #pragma parameter hcrt_blue_horizontal_convergence   "        Blue Horizontal Deconvergence"                        0.00     -10.0 10.0     0.01
-// #pragma parameter hcrt_red_beam_sharpness            "        Red Beam Sharpness"                                   1.75     0.0   5.0      0.05
-// #pragma parameter hcrt_red_beam_attack               "        Red Beam Attack"                                      0.50     0.0   2.0      0.01
-// #pragma parameter hcrt_green_beam_sharpness          "        Green Beam Sharpness"                                 1.75     0.0   5.0      0.05
-// #pragma parameter hcrt_green_beam_attack             "        Green Beam Attack"                                    0.50     0.0   2.0      0.01
-// #pragma parameter hcrt_blue_beam_sharpness           "        Blue Beam Sharpness"                                  1.75     0.0   5.0      0.05
-// #pragma parameter hcrt_blue_beam_attack              "        Blue Beam Attack"                                     0.50     0.0   2.0      0.01
+uniform float HCRT_MAX_NITS                        <ui_category = "HDR Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 10000.0; ui_step = 10.0; ui_label = "HDR: Display's Peak Luminance";> = 1000.0;
+uniform float HCRT_PAPER_WHITE_NITS                <ui_category = "HDR Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 10000.0; ui_step = 10.0; ui_label = "HDR: Display's Paper White Luminance";> = 200.0;
+uniform float HCRT_CONTENT_GAMUT                   <ui_category = "HDR Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 27.0;     ui_step = 1.0;  ui_label = "HDR: Content Color Gamut";> = 17.0;
 
+uniform float gamutsupport1                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "0:CBS1951 | 1:1953 | 2:1953RP | 3:1961RP | 4:1964";> = 0.0;
+uniform float gamutsupport2                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "5:PAL | 6:Rec601 | 7:P22-J | 8:1970sRP";> = 0.0;
+uniform float gamutsupport3                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "9:1980sRP | 10:AppleRGB | 11:PhilipsPC | 12:P22-80";> = 0.0;
+uniform float gamutsupport4                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "13:P22-90 | 14:RPTV | 15:GBA | 16:PSP | 17:Rec709";> = 0.0;
+uniform float gamutsupport5                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "18:AdobeRGB | 19:DSLite | 20:OldiPhone | 21:PSP3K(PH)";> = 0.0;
+uniform float gamutsupport6                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "22:DisplayP3 | 23:AMOLED | 24:PSV(PH) | 25:PSV2K(PH)";> = 0.0;
+uniform float gamutsupport7                        <ui_category = "Content Color Gamut Key"; ui_type = "drag"; ui_min = 0.0; ui_max = 0.0;    ui_step = 0.0;  ui_label = "26:Ex709 | 27:Rec2020";> = 0.0;
 
+uniform float HCRT_CRT_SCREEN_TYPE                 <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "Screen Type: APERTURE GRILLE | SHADOW MASK | SLOT MASK";> = 0.0;
+uniform float HCRT_CRT_RESOLUTION                  <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 3.0;     ui_step = 1.0;  ui_label = "Resolution: 300TVL | 600TVL | 800TVL | 1000TVL";> = 1.0;
+uniform float HCRT_DOWNSAMPLE                      <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 1.0;  ui_label = "Downsample: Point | Box";> = 1.0;
+uniform float HCRT_WHITE_TEMPERATURE_D65           <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 18500.0; ui_step = 100.0; ui_label = "D65 White Temperature (Kelvin)";> = 6504.0;
+uniform float HCRT_WHITE_TEMPERATURE_D93           <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 18500.0; ui_step = 100.0; ui_label = "D93 White Temperature (Kelvin)";> = 9305.0;
+uniform float HCRT_BRIGHTNESS                      <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = -1.0; ui_max = 1.0;    ui_step = 0.01;  ui_label = "Brightness";> = 0.0;
+uniform float HCRT_CONTRAST                        <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = -1.0; ui_max = 1.0;    ui_step = 0.01;  ui_label = "Contrast";> = 0.0;
+uniform float HCRT_SATURATION                      <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = -1.0; ui_max = 1.0;    ui_step = 0.01;  ui_label = "Saturation";> = 0.0;
+uniform float HCRT_GAMMA_IN                        <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 1.0;  ui_max = 5.0;    ui_step = 0.01;  ui_label = "Gamma";> = 2.22;
+uniform float HCRT_GAMMA_CUTOFF                    <ui_category = "CRT Settings"; ui_type = "drag"; ui_min = 0.0;  ui_max = 100.0;  ui_step = 1.0;   ui_label = "Inverse Gamma Cutoff (x1000)";> = 1.0;
 
-uniform float HCRT_HDR                             <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 1.0;  ui_label = "SDR | HDR";> = 1.0;
-uniform float HCRT_MAX_NITS                        <ui_type = "drag"; ui_min = 0.0; ui_max = 10000.0; ui_step = 10.0; ui_label = "HDR: Display's Peak Luminance";> = 1000.0;
-uniform float HCRT_PAPER_WHITE_NITS                <ui_type = "drag"; ui_min = 0.0; ui_max = 10000.0; ui_step = 10.0; ui_label = "HDR: Display's Paper White Luminance";> = 200.0;
-uniform float HCRT_EXPAND_GAMUT                    <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 1.0;  ui_label = "HDR: Original/Vivid";> = 1.0;
-uniform float HCRT_OUTPUT_COLOUR_SPACE             <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "SDR: Display's Colour Space: r709 | sRGB | DCI-P3";> = 1.0;
-uniform float HCRT_R709_GAMMA_OUT                  <ui_type = "drag"; ui_min = 1.0; ui_max = 5.0;     ui_step = 0.01; ui_label = "SDR: r709 Gamma";> = 2.22;
-uniform float HCRT_SRGB_GAMMA_OUT                  <ui_type = "drag"; ui_min = 1.0; ui_max = 5.0;     ui_step = 0.01; ui_label = "SDR: sRGB Gamma";> = 2.4;
-uniform float HCRT_P3_GAMMA_OUT                    <ui_type = "drag"; ui_min = 1.0; ui_max = 5.0;     ui_step = 0.01; ui_label = "SDR: DCI-P3 Gamma";> = 2.6;
-uniform float HCRT_R709_GAMMA_CUTOFF               <ui_type = "drag"; ui_min = 0.0; ui_max = 100.0;   ui_step = 1.0;  ui_label = "SDR: r709 Gamma Cutoff (x1000)";> = 1.0;
-uniform float HCRT_SRGB_GAMMA_CUTOFF               <ui_type = "drag"; ui_min = 0.0; ui_max = 100.0;   ui_step = 1.0;  ui_label = "SDR: sRGB Gamma Cutoff (x1000)";> = 1.0;
-uniform float HCRT_LCD_RESOLUTION                  <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "Display's Resolution: 1080p | 4K | 8K";> = 1.0;
-uniform float HCRT_LCD_SUBPIXEL                    <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "Display's Subpixel Layout: RGB | RWBG (OLED) | BGR";> = 0.0;
-uniform float HCRT_COLOUR_ACCURATE                 <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 1.0;  ui_label = "Mask Accurate/Colour Accurate";> = 1.0;
+uniform float HCRT_V_SIZE                          <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Vertical Size";> = 1.0;
+uniform float HCRT_V_CENT                          <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = -200.0; ui_max = 200.0;ui_step = 1.0;   ui_label = "Vertical Center";> = 0.0;
+uniform float HCRT_RED_VERTICAL_CONVERGENCE        <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Red Vertical Deconvergence";> = -0.14;
+uniform float HCRT_GREEN_VERTICAL_CONVERGENCE      <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Green Vertical Deconvergence";> = 0.0;
+uniform float HCRT_BLUE_VERTICAL_CONVERGENCE       <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Blue Vertical Deconvergence";> = 0.0;
+uniform float HCRT_RED_SCANLINE_MIN                <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Red Scanline Min";> = 0.55;
+uniform float HCRT_RED_SCANLINE_MAX                <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Red Scanline Max";> = 0.82;
+uniform float HCRT_RED_SCANLINE_ATTACK             <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Red Scanline Attack";> = 0.65;
+uniform float HCRT_GREEN_SCANLINE_MIN              <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Green Scanline Min";> = 0.55;
+uniform float HCRT_GREEN_SCANLINE_MAX              <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Green Scanline Max";> = 0.90;
+uniform float HCRT_GREEN_SCANLINE_ATTACK           <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Green Scanline Attack";> = 0.13;
+uniform float HCRT_BLUE_SCANLINE_MIN               <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Blue Scanline Min";> = 0.72;
+uniform float HCRT_BLUE_SCANLINE_MAX               <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Blue Scanline Max";> = 1.0;
+uniform float HCRT_BLUE_SCANLINE_ATTACK            <ui_category = "Vertical Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Blue Scanline Attack";> = 0.65;
 
-uniform float HCRT_CRT_SCREEN_TYPE                 <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "Screen Type: APERTURE GRILLE | SHADOW MASK | SLOT MASK";> = 0.0;
-uniform float HCRT_CRT_RESOLUTION                  <ui_type = "drag"; ui_min = 0.0; ui_max = 3.0;     ui_step = 1.0;  ui_label = "Resolution: 300TVL | 600TVL | 800TVL | 1000TVL";> = 1.0;
-uniform float HCRT_CRT_COLOUR_SYSTEM               <ui_type = "drag"; ui_min = 0.0; ui_max = 3.0;     ui_step = 1.0;  ui_label = "Colour System: r709 | PAL | NTSC-U | NTSC-J";> = 3.0;
-uniform float HCRT_CRT_PHOSPHOR_SET                <ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 1.0;  ui_label = "Phosphors: NONE | P22-J | P22-80 | P22-90 | RPTV | 1953";> = 0.0;
-uniform float HCRT_WHITE_TEMPERATURE_D65           <ui_type = "drag"; ui_min = 0.0; ui_max = 18500.0; ui_step = 100.0; ui_label = "D65 White Temperature (Kelvin)";> = 6504.0;
-uniform float HCRT_WHITE_TEMPERATURE_D93           <ui_type = "drag"; ui_min = 0.0; ui_max = 18500.0; ui_step = 100.0; ui_label = "D93 White Temperature (Kelvin)";> = 9305.0;
-uniform float HCRT_BRIGHTNESS                      <ui_type = "drag"; ui_min = -1.0; ui_max = 1.0;    ui_step = 0.01;  ui_label = "Brightness";> = 0.0;
-uniform float HCRT_CONTRAST                        <ui_type = "drag"; ui_min = -1.0; ui_max = 1.0;    ui_step = 0.01;  ui_label = "Contrast";> = 0.0;
-uniform float HCRT_SATURATION                      <ui_type = "drag"; ui_min = -1.0; ui_max = 1.0;    ui_step = 0.01;  ui_label = "Saturation";> = 0.0;
-uniform float HCRT_GAMMA_IN                        <ui_type = "drag"; ui_min = 1.0;  ui_max = 5.0;    ui_step = 0.01;  ui_label = "Gamma";> = 2.22;
-uniform float HCRT_GAMMA_CUTOFF                    <ui_type = "drag"; ui_min = 0.0;  ui_max = 100.0;  ui_step = 1.0;   ui_label = "Inverse Gamma Cutoff (x1000)";> = 1.0;
-uniform float HCRT_PIN_PHASE                       <ui_type = "drag"; ui_min = -0.2; ui_max = 0.2;    ui_step = 0.01;  ui_label = "Pin Phase";> = 0.0;
-uniform float HCRT_PIN_AMP                         <ui_type = "drag"; ui_min = -0.2; ui_max = 0.2;    ui_step = 0.01;  ui_label = "Pin Amp";> = 0.0;
+uniform float HCRT_H_SIZE                          <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Horizontal Size";> = 1.0;
+uniform float HCRT_H_CENT                          <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = -200.0; ui_max = 200.0;ui_step = 1.0;   ui_label = "Horizontal Center";> = 0.0;
+uniform float HCRT_RED_HORIZONTAL_CONVERGENCE      <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Red Horizontal Deconvergence";> = 0.0;
+uniform float HCRT_GREEN_HORIZONTAL_CONVERGENCE    <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Green Horizontal Deconvergence";> = 0.0;
+uniform float HCRT_BLUE_HORIZONTAL_CONVERGENCE     <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Blue Horizontal Deconvergence";> = 0.0;
+uniform float HCRT_RED_BEAM_SHARPNESS              <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 0.05;  ui_label = "Red Beam Sharpness";> = 1.75;
+uniform float HCRT_RED_BEAM_ATTACK                 <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 0.01;  ui_label = "Red Beam Attack";> = 0.72;
+uniform float HCRT_GREEN_BEAM_SHARPNESS            <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 0.05;  ui_label = "Green Beam Sharpness";> = 1.60;
+uniform float HCRT_GREEN_BEAM_ATTACK               <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 0.01;  ui_label = "Green Beam Attack";> = 0.80;
+uniform float HCRT_BLUE_BEAM_SHARPNESS             <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 0.05;  ui_label = "Blue Beam Sharpness";> = 1.90;
+uniform float HCRT_BLUE_BEAM_ATTACK                <ui_category = "Horizontal Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 0.01;  ui_label = "Blue Beam Attack";> = 0.45;
 
-uniform float HCRT_V_SIZE                          <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Vertical Size";> = 1.0;
-uniform float HCRT_V_CENT                          <ui_type = "drag"; ui_min = -200.0; ui_max = 200.0;ui_step = 1.0;   ui_label = "Vertical Center";> = 0.0;
-uniform float HCRT_RED_VERTICAL_CONVERGENCE        <ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Red Vertical Deconvergence";> = -0.14;
-uniform float HCRT_GREEN_VERTICAL_CONVERGENCE      <ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Green Vertical Deconvergence";> = 0.0;
-uniform float HCRT_BLUE_VERTICAL_CONVERGENCE       <ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Blue Vertical Deconvergence";> = 0.0;
-uniform float HCRT_RED_SCANLINE_MIN                <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Red Scanline Min";> = 0.55;
-uniform float HCRT_RED_SCANLINE_MAX                <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Red Scanline Max";> = 0.82;
-uniform float HCRT_RED_SCANLINE_ATTACK             <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Red Scanline Attack";> = 0.65;
-uniform float HCRT_GREEN_SCANLINE_MIN              <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Green Scanline Min";> = 0.55;
-uniform float HCRT_GREEN_SCANLINE_MAX              <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Green Scanline Max";> = 0.90;
-uniform float HCRT_GREEN_SCANLINE_ATTACK           <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Green Scanline Attack";> = 0.13;
-uniform float HCRT_BLUE_SCANLINE_MIN               <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Blue Scanline Min";> = 0.72;
-uniform float HCRT_BLUE_SCANLINE_MAX               <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Blue Scanline Max";> = 1.0;
-uniform float HCRT_BLUE_SCANLINE_ATTACK            <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Blue Scanline Attack";> = 0.65;
+uniform float HCRT_COLOUR_ACCURATE                 <ui_category = "Legacy/Support Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 1.0;  ui_label = "Mask Accurate/Colour Accurate";> = 1.0;
+uniform float HCRT_CRT_COLOUR_SYSTEM               <ui_category = "Legacy/Support Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 3.0;     ui_step = 1.0;  ui_label = "Colour System: r709 | PAL | NTSC-U | NTSC-J";> = 0.0;
+uniform float HCRT_CRT_PHOSPHOR_SET                <ui_category = "Legacy/Support Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 1.0;  ui_label = "Phosphors: NONE | P22-J | P22-80 | P22-90 | RPTV | 1953";> = 0.0;
+uniform float HCRT_PIN_PHASE                       <ui_category = "Legacy/Support Settings"; ui_type = "drag"; ui_min = -0.2; ui_max = 0.2;    ui_step = 0.01;  ui_label = "Pin Phase";> = 0.0;
+uniform float HCRT_PIN_AMP                         <ui_category = "Legacy/Support Settings"; ui_type = "drag"; ui_min = -0.2; ui_max = 0.2;    ui_step = 0.01;  ui_label = "Pin Amp";> = 0.0;
 
-uniform float HCRT_H_SIZE                          <ui_type = "drag"; ui_min = 0.0; ui_max = 1.0;     ui_step = 0.01;  ui_label = "Horizontal Size";> = 1.0;
-uniform float HCRT_H_CENT                          <ui_type = "drag"; ui_min = -200.0; ui_max = 200.0;ui_step = 1.0;   ui_label = "Horizontal Center";> = 0.0;
-uniform float HCRT_RED_HORIZONTAL_CONVERGENCE      <ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Red Horizontal Deconvergence";> = 0.0;
-uniform float HCRT_GREEN_HORIZONTAL_CONVERGENCE    <ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Green Horizontal Deconvergence";> = 0.0;
-uniform float HCRT_BLUE_HORIZONTAL_CONVERGENCE     <ui_type = "drag"; ui_min = -10.0 ; ui_max = 10.0; ui_step = 0.01;  ui_label = "Blue Horizontal Deconvergence";> = 0.0;
-uniform float HCRT_RED_BEAM_SHARPNESS              <ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 0.05;  ui_label = "Red Beam Sharpness";> = 1.75;
-uniform float HCRT_RED_BEAM_ATTACK                 <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 0.01;  ui_label = "Red Beam Attack";> = 0.72;
-uniform float HCRT_GREEN_BEAM_SHARPNESS            <ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 0.05;  ui_label = "Green Beam Sharpness";> = 1.60;
-uniform float HCRT_GREEN_BEAM_ATTACK               <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 0.01;  ui_label = "Green Beam Attack";> = 0.80;
-uniform float HCRT_BLUE_BEAM_SHARPNESS             <ui_type = "drag"; ui_min = 0.0; ui_max = 5.0;     ui_step = 0.05;  ui_label = "Blue Beam Sharpness";> = 1.90;
-uniform float HCRT_BLUE_BEAM_ATTACK                <ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 0.01;  ui_label = "Blue Beam Attack";> = 0.45;
+uniform float HCRT_OUTPUT_COLOUR_SPACE             <ui_category = "SDR Mode Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 2.0;     ui_step = 1.0;  ui_label = "SDR: Display's Colour Space: r709 | sRGB | DCI-P3";> = 1.0;
+uniform float HCRT_R709_GAMMA_OUT                  <ui_category = "SDR Mode Settings"; ui_type = "drag"; ui_min = 1.0; ui_max = 5.0;     ui_step = 0.01; ui_label = "SDR: r709 Gamma";> = 2.22;
+uniform float HCRT_SRGB_GAMMA_OUT                  <ui_category = "SDR Mode Settings"; ui_type = "drag"; ui_min = 1.0; ui_max = 5.0;     ui_step = 0.01; ui_label = "SDR: sRGB Gamma";> = 2.4;
+uniform float HCRT_P3_GAMMA_OUT                    <ui_category = "SDR Mode Settings"; ui_type = "drag"; ui_min = 1.0; ui_max = 5.0;     ui_step = 0.01; ui_label = "SDR: DCI-P3 Gamma";> = 2.6;
+uniform float HCRT_R709_GAMMA_CUTOFF               <ui_category = "SDR Mode Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 100.0;   ui_step = 1.0;  ui_label = "SDR: r709 Gamma Cutoff (x1000)";> = 1.0;
+uniform float HCRT_SRGB_GAMMA_CUTOFF               <ui_category = "SDR Mode Settings"; ui_type = "drag"; ui_min = 0.0; ui_max = 100.0;   ui_step = 1.0;  ui_label = "SDR: sRGB Gamma Cutoff (x1000)";> = 1.0;
 
 
 #define COMPAT_TEXTURE(c, d) tex2D(c, d)
@@ -147,7 +77,7 @@ uniform float HCRT_BLUE_BEAM_ATTACK                <ui_type = "drag"; ui_min = 0
 #endif
 
 #ifndef CRT_HEIGHT
-#define CRT_HEIGHT   240.0f
+#define CRT_HEIGHT   480.0f
 #endif
 
 texture SourceTexture { Width = CRT_WIDTH; Height = CRT_HEIGHT; Format = RGBA8; };
@@ -1083,53 +1013,6 @@ static const uint kSlotMasks8K1000TVL[kBGRAxis * kMaxSlotSizeY * kMaxSlotSizeX *
 #undef kRBGXRBGX_RBGXXXXX_RBGXRBGX_XXXXRBGX   
 #undef kBGRXBGRX_BGRXXXXX_BGRXBGRX_XXXXBGRX   
 
-// BLACK WHITE MASKS
-#if ENABLE_BLACK_WHITE_MASKS
-
-#define kMaxBlackWhiteSize       14
-
-#define kW                   kWhite, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack  
-
-#define kWX                  kWhite, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack  
-#define kWWX                 kWhite, kWhite, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack  
-#define kWWXX                kWhite, kWhite, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack  
-#define kWWWWX               kWhite, kWhite, kWhite, kWhite, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack  
-#define kWWWWWXX             kWhite, kWhite, kWhite, kWhite, kWhite, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack, kBlack  
-#define kWWWWWWWWWWWXXX      kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite, kWhite /*kBlack, kBlack, kBlack*/  
-
-static const float kBlackWhiteMaskSize[kResolutionAxis * kTVLAxis] = {   4.0f, 2.0f, 1.0f, 1.0f  ,   7.0f, 4.0f, 3.0f, 2.0f  ,   14.0f, 7.0f, 5.0f, 4.0f   }; //4K: 300 TVL, 600 TVL, 800 TVL, 1000 TVL   8K: 300 TVL, 600 TVL, 800 TVL, 1000 TVL
-
-static const uint kBlackWhiteMasks[kResolutionAxis * kTVLAxis * kBGRAxis * kMaxBlackWhiteSize] = {
-   { // 1080p
-      { kWWXX, kWWXX, kWWXX },                                 // 300 TVL
-      { kWX, kWX, kWX },                                       // 600 TVL
-      { kW, kW, kW },                                          // 800 TVL
-      { kW, kW, kW }                                           // 1000 TVL
-   },
-   { // 4K
-      { kWWWWWXX, kWWWWWXX, kWWWWWXX },                        // 300 TVL
-      { kWWXX, kWWXX, kWWXX },                                 // 600 TVL
-      { kWWX, kWWX, kWWX },                                    // 800 TVL
-      { kWX, kWX, kWX }                                        // 1000 TVL
-   },
-   { // 8K
-      { kWWWWWWWWWWWXXX, kWWWWWWWWWWWXXX, kWWWWWWWWWWWXXX },   // 300 TVL
-      { kWWWWWXX, kWWWWWXX, kWWWWWXX },                        // 600 TVL
-      { kWWWWX, kWWWWX, kWWWWX },                              // 800 TVL
-      { kWWXX, kWWXX, kWWXX }                                  // 1000 TVL
-   }
-};
-
-#undef kW                
-#undef kWX                
-#undef kWWX               
-#undef kWWXX              
-#undef kWWWWX             
-#undef kWWWWWXX           
-#undef kWWWWWWWWWWWXXX 
-
-#endif // ENABLE_BLACK_WHITE_MASKS
-
 ////////////////////////////////////////
 // REPLACE THESE
 
@@ -1387,20 +1270,17 @@ float3 ColourGrade(const float3 colour)
 
 float3 InverseTonemap(const float3 sdr_linear, const float max_nits, const float paper_white_nits)
 {
-   const float luma                 = dot(sdr_linear, float3(0.2126, 0.7152, 0.0722));  // Rec BT.709 luma coefficients - https://en.wikipedia.org/wiki/Luma_(video) 
+   const float input_val = max(sdr_linear.r, max(sdr_linear.g, sdr_linear.b));
 
-   // Inverse reinhard tonemap 
-   const float max_value            = (max_nits / paper_white_nits) + kEpsilon;
-   const float elbow                = max_value / (max_value - 1.0f);                          
-   const float offset               = 1.0f - ((0.5f * elbow) / (elbow - 0.5f));              
-   
-   const float hdr_luma_inv_tonemap = offset + ((luma * elbow) / (elbow - luma));
-   const float sdr_luma_inv_tonemap = luma / ((1.0f + kEpsilon) - luma);                     // Convert the srd < 0.5 to 0.0 -> 1.0 range 
+   if (input_val < kEpsilon) return sdr_linear;
 
-   const float luma_inv_tonemap     = (luma > 0.5f) ? hdr_luma_inv_tonemap : sdr_luma_inv_tonemap;
-   const float3 hdr                   = sdr_linear / (luma + kEpsilon) * luma_inv_tonemap;
+   const float peak_ratio = max_nits / paper_white_nits;
 
-   return hdr;
+   const float numerator = input_val;
+   const float denominator = 1.0 - input_val * (1.0 - (1.0 / peak_ratio));
+   const float tonemapped_val = numerator / max(denominator, kEpsilon);
+
+   return sdr_linear * (tonemapped_val / input_val);
 }
 
 float3 InverseTonemapConditional(const float3 _linear)
@@ -1419,23 +1299,300 @@ float3 InverseTonemapConditional(const float3 _linear)
 
 //#define kMaxNitsFor2084     10000.0f
 
-static const float3x3 k709_to_2020 = float3x3 (
-   0.6274040f, 0.3292820f, 0.0433136f,
-   0.0690970f, 0.9195400f, 0.0113612f,
-   0.0163916f, 0.0880132f, 0.8955950f);
+static const float3x3 k709_to_2020 = float3x3 (   
+   0.627403895934699f, 0.329283038377884f, 0.043313065687417f,
+   0.069097289358232f, 0.919540395075458f, 0.011362315566309f,
+   0.016391438875150f, 0.088013307877226f, 0.895595253247624f);
 
 // START Converted from (Copyright (c) Microsoft Corporation - Licensed under the MIT License.)  https://github.com/microsoft/Xbox-ATG-Samples/tree/master/Kits/ATGTK/HDR 
 static const float3x3 kExpanded709_to_2020 = float3x3 (
     0.6274040f,  0.3292820f, 0.0433136f,
     0.0457456f,  0.941777f,  0.0124772f,
    -0.00121055f, 0.0176041f, 0.983607f);
+   
+static const float3x3 kNTSC1953_to_2020 = float3x3 (
+   0.906538f, 0.074810f, 0.018652f,
+   0.076155f, 0.860656f, 0.063189f,
+   -0.002015f, 0.041546f, 0.960469f);
+   
+//NTSC (1987)/SMPTE 240M/SMPTE C
+static const float3x3 k601_to_2020 = float3x3 (
+   0.595254206376441f, 0.349313919749775f, 0.055431873873783f,
+   0.081243661805292f, 0.891503295602217f, 0.027253042592490f,
+   0.015512341244385f, 0.081911642143068f, 0.902576016612547f);
 
-static const float3x3 k2020Gamuts[2] = { k709_to_2020, kExpanded709_to_2020 };
+//Pal/Secam/ITU-R BT.470 - 625
+static const float3x3 kPAL_to_2020 = float3x3 (
+   0.655036776701967f, 0.302160964978908f, 0.042802258319126f,
+   0.072140555698383f, 0.916631128820964f, 0.011228315480653f,
+   0.017113370439452f, 0.097853469923833f, 0.885033159636715f);
+
+//EBU Tech. 3213-E
+static const float3x3 k3213E_to_2020 = float3x3 (
+   0.656656353779129f, 0.300719063748279f, 0.042624582472592f,
+   0.072525428085101f, 0.916271070705580f, 0.011203501209319f,
+   0.017188500243598f, 0.097872586557247f, 0.884938913199155f);
+
+//DCI-P3
+static const float3x3 kaDCIP3_to_2020 = float3x3 (
+   0.707334754484899f, 0.247569002167623f, 0.045096243347478f,
+   0.036801714143967f, 0.965390705258538f, -0.002192419402504f,
+   0.000222194187031f, 0.029426016456367f, 0.970351789356603f);
+
+//Display P3/P3-D65
+static const float3x3 kaDisplayP3_to_2020 = float3x3 (
+   0.753833034361721f, 0.198597369052617f, 0.047569596585662f,
+   0.045743848965358f, 0.941777219811693f, 0.012478931222948f,
+   -0.001210340354518f, 0.017601717301090f, 0.983608623053428f);
+
+//sRGB
+static const float3x3 ksRGB_to_2020 = float3x3 (
+   0.627441372057978f, 0.329297459521909f, 0.043351458394495f,
+   0.069027617147078f, 0.919580666887028f, 0.011361422575401f,
+   0.016364235071681f, 0.088017162471727f, 0.895564972725983f);
+
+//Adobe RGB (1998)
+static const float3x3 kAdobeRGB1998_to_2020 = float3x3 (
+   0.877337599133789f, 0.077497709099687f, 0.045174670424343f,
+   0.096613889523141f, 0.891520398792844f, 0.011846866967978f,
+   0.022920009813905f, 0.043037949654269f, 0.934044659100325f);
+
+//Adobe Wide Gamut RGB
+static const float3x3 kAdobeWGRGB_to_2020 = float3x3 (
+   1.032815f, -0.099761f, 0.066946f,
+   -0.053957f, 1.132758f, -0.078800f,
+   0.001428f, 0.019514f, 0.979059f);
+
+//Apple RGB
+static const float3x3 kAppleRGB_to_2020 = float3x3 (
+   0.678529391873470f, 0.268103222741389f, 0.053367385385141f,
+   0.096031750282729f, 0.877730211467603f, 0.026238038249668f,
+   0.021192740493379f, 0.109846519921590f, 0.868960739585031f);
+
+//ITU-R BT.2020
+static const float3x3 k2020_to_2020 = float3x3 (
+   1.000000000000000f, 0.000000000000000f, 0.000000000000000f,
+   0.000000000000000f, 1.000000000000000f, -0.000000000000000f,
+   0.000000000000000f, 0.000000000000000f, 1.000000000000000f);
+   
+static const float3x3 kNTSCJP22_to_2020 = float3x3 (
+    0.691014f, 0.261287f, 0.047700f,
+    0.109646f, 0.876813f, 0.013541f,
+    0.014382f, 0.096629f, 0.888989f);
+
+// P22_80
+static const float3x3 kP2280_to_2020 = float3x3 (
+   0.702409f, 0.260434f, 0.037157f,
+   0.087800f, 0.889849f, 0.022351f,
+   0.004390f, 0.077212f, 0.918398f);
+
+// P22 improved with tinted phosphors
+static const float3x3 kP2290_to_2020 = float3x3 (
+   0.621792f, 0.339128f, 0.039080f,
+   0.057073f, 0.919420f, 0.023508f,
+   -0.000938f, 0.035014f, 0.965924f);
+
+// RPTV (Rear Projection TV) for NTSC-U late 90s, early 00s
+static const float3x3 kRPTV_to_2020 = float3x3 (
+   0.504405f, 0.451465f, 0.044129f,
+   0.059729f, 0.908159f, 0.032112f,
+   0.010633f, 0.062627f, 0.926741f);
+
+// XXA (P22 sul?de/silicate/phosphate)
+static const float3x3 kXXA_to_2020 = float3x3 (
+   0.867034f, 0.096021f, 0.036945f,
+   0.064650f, 0.936157f, -0.000808f,
+   -0.001711f, 0.036583f, 0.965127f);
+   
+// XXB (P22 all-sulﬁde)/1958
+static const float3x3 kXXB_to_2020 = float3x3 (
+   0.651821f, 0.292537f, 0.055642f,
+   0.065768f, 0.926913f, 0.007319f,
+   -0.001740f, 0.104000f, 0.897740f);
+
+// XXC (P22 sulﬁde/vanadate)/1964
+static const float3x3 kXXC_to_2020 = float3x3 (
+   0.706425f, 0.235501f, 0.058074f,
+   0.065679f, 0.952661f, -0.018340f,
+   0.015010f, 0.132171f, 0.852819f);
+
+// XXD (P22 sul?de/oxysul?de)
+static const float3x3 kXXD_to_2020 = float3x3 (
+//   0.526084f, 0.418310f, 0.055607f,
+//   0.073322f, 0.901471f, 0.025207f,
+//   0.001097f, 0.052624f, 0.946279f);
+
+   0.639371f, 0.317872f, 0.042756f,
+   0.085284f, 0.887675f, 0.027041f,
+   0.019961f, 0.084963f, 0.895076f);
+
+//Conrac 7211N19
+static const float3x3 kConrac_to_2020 = float3x3 (
+   0.848016f, 0.103509f, 0.048476f,
+   0.090261f, 0.893984f, 0.015755f,
+   0.030765f, 0.064658f, 0.904577f);
+
+//Sony Trinitron KV-20M20
+static const float3x3 kTT96_to_2020 = float3x3 (
+   0.678529f, 0.268103f, 0.053367f,
+   0.096032f, 0.877730f, 0.026238f,
+   0.021193f, 0.109847f, 0.868961f);
+
+//SMPTE-C - Measured Average Phosphor (1979-1994)
+static const float3x3 kMA7994_to_2020 = float3x3 (
+   0.708152f, 0.257311f, 0.034538f,
+   0.103842f, 0.879177f, 0.016980f,
+   0.002749f, 0.076286f, 0.920965f);
+
+//NTSC-J - Standard Phosphor
+static const float3x3 kNTSCJSt_to_2020 = float3x3 (
+   0.693529f, 0.259060f, 0.047411f,
+   0.115249f, 0.869342f, 0.015409f,
+   0.019484f, 0.095806f, 0.884711f);
+
+//Philips Monitors
+static const float3x3 kPhilips_to_2020 = float3x3 (
+   0.634936f, 0.310278f, 0.054786f,
+   0.082458f, 0.909159f, 0.008382f,
+   0.013977f, 0.061264f, 0.924759f);
+   
+//CBS field-sequential color
+static const float3x3 kCBS1951_to_2020 = float3x3 (
+   0.783661f,  0.174126f, 0.042214,
+   0.046420f,  0.977702f, -0.024122,
+   -0.001088f,  0.033960f, 0.967129);
+   
+//1953 Reciever Phosphors Matrices (TV Display Phosphors/Primaries — Some History)
+static const float3x3 k1953RP_to_2020 = float3x3 (
+    0.849799f, 0.093430f, 0.056770f,
+    0.063365f, 0.910900f, 0.025734f,
+    0.001677f, 0.035596f, 0.966080f);
+	
+//1961 Reciever Phosphors Matrices (TV Display Phosphors/Primaries — Some History)
+static const float3x3 k1961RP_to_2020 = float3x3 (
+	0.662328f, 0.294562f, 0.043110f,
+	0.066828f, 0.921863f, 0.011309f,
+	0.001768f, 0.110371f, 0.891397f);
+	
+//1970s Reciever Phosphors Matrices (TV Display Phosphors/Primaries — Some History)
+static const float3x3 k1970sRP_to_2020 = float3x3 (
+    0.550286f, 0.404906f, 0.044808f,
+    0.076695f, 0.911550f, 0.011755f,
+    0.001148f, 0.072336f, 0.926516f);
+	
+//1980s Reciever Phosphors Matrices (TV Display Phosphors/Primaries — Some History)
+static const float3x3 k1980sRP_to_2020 = float3x3 (
+    0.486929f, 0.460664f, 0.052407f,
+    0.068735f, 0.924036f, 0.007230f,
+    0.017765f, 0.055913f, 0.926322f);   
+
+static const float3x3 kGBC_to_2020 = float3x3 (
+    0.480664f, 0.030999f, 0.488336f,
+    0.254689f, 0.039603f, 0.705707f,
+    0.201495f, 0.020874f, 0.777631f);
+
+static const float3x3 kGBA_to_2020 = float3x3 (
+    0.613887f, 0.241502f, 0.144611f,
+    0.225416f, 0.376913f, 0.397672f,
+    0.213884f, 0.160997f, 0.625119f);
+
+static const float3x3 kVBA_to_2020 = float3x3 (
+    0.511009f, 0.370072f, 0.118920f,
+    0.147996f, 0.640980f, 0.211024f,
+    0.113711f, 0.259285f, 0.627004f);
+
+static const float3x3 kVBANDStopB_to_2020 = float3x3 (
+    0.574458f, 0.378632f, 0.046910f,
+    0.166372f, 0.655806f, 0.177822f,
+    0.127830f, 0.265282f, 0.606888f);
+
+static const float3x3 kGBASP001_to_2020 = float3x3 (
+    0.657312f, 0.129653f, 0.213034f,
+    0.276151f, 0.172264f, 0.551585f,
+    0.219421f, 0.071942f, 0.708637f);
+
+static const float3x3 kNDStop_to_2020 = float3x3 (
+    0.505180f, 0.449925f, 0.044895f,
+    0.135502f, 0.694312f, 0.170186f,
+    0.128643f, 0.290528f, 0.580829f);
+
+static const float3x3 kNDSbot_to_2020 = float3x3 (
+    0.552550f, 0.400108f, 0.047343f,
+    0.158357f, 0.634676f, 0.206967f,
+    0.135599f, 0.250715f, 0.613686f);
+
+static const float3x3 kPSP_to_2020 = float3x3 (
+    0.616974f, 0.370480f, 0.012546f,
+    0.110186f, 0.742632f, 0.147183f,
+    0.042149f, 0.086750f, 0.871101f);
+
+static const float3x3 kGBAMic_to_2020 = float3x3 (
+    0.527771f, 0.440056f, 0.032174f,
+    0.156245f, 0.699673f, 0.144082f,
+    0.165485f, 0.205985f, 0.628531f);
+
+static const float3x3 kGBASP101_to_2020 = float3x3 (
+    0.601413f, 0.369949f, 0.028638f,
+    0.097055f, 0.833935f, 0.069010f,
+    0.021480f, 0.043474f, 0.935046f);
+
+static const float3x3 kNDSLtop_to_2020 = float3x3 (
+    0.559068f, 0.394156f, 0.046776f,
+    0.086367f, 0.848814f, 0.064820f,
+    0.032753f, 0.048467f, 0.918780f);
+
+static const float3x3 kNDSLbot_to_2020 = float3x3 (
+    0.588690f, 0.369212f, 0.042098f,
+    0.091811f, 0.822779f, 0.085410f,
+    0.029350f, 0.047630f, 0.923020f);
+
+static const float3x3 k3DStop_to_2020 = float3x3 (
+    0.617901f, 0.348510f, 0.033588f,
+    0.120870f, 0.846257f, 0.032874f,
+    0.044942f, 0.045950f, 0.909108f);
+
+static const float3x3 k3DSbot_to_2020 = float3x3 (
+    0.609204f, 0.356901f, 0.033896f,
+    0.119225f, 0.848015f, 0.032760f,
+    0.051185f, 0.052276f, 0.896540f);
+
+static const float3x3 k3DStop2_to_2020 = float3x3 (
+    0.578434f, 0.384236f, 0.037330f,
+    0.103178f, 0.853935f, 0.042887f,
+    0.041183f, 0.042332f, 0.916485f);
+
+static const float3x3 kN3DSXLtop_to_2020 = float3x3 (
+    0.642314f, 0.324900f, 0.032786f,
+    0.123906f, 0.801357f, 0.074737f,
+    0.027595f, 0.041134f, 0.931271f);
+
+static const float3x3 kLaterDSavg_to_2020 = float3x3 (
+    0.599544f, 0.364028f, 0.036429f,
+    0.105486f, 0.837465f, 0.057049f,
+    0.035303f, 0.045922f, 0.918776f);
+
+static const float3x3 kOGiPhone_to_2020 = float3x3 (
+    0.619409f, 0.364157f, 0.016434f,
+    0.116594f, 0.826725f, 0.056681f,
+    0.030036f, 0.114926f, 0.855038f);
+
+static const float3x3 kAMOLED_to_2020 = float3x3 (
+    0.887936f, 0.088571f, 0.023493f,
+    0.091811f, 0.918098f, -0.009910f,
+    -0.000385f, 0.025545f, 0.974840f);
+
+static const float3x3 kSwitchVivid_to_2020 = float3x3 (
+    0.883178f, 0.102520f, 0.014303f,
+    0.055890f, 0.949264f, -0.005154f,
+    0.000029f, 0.019424f, 0.980546f);
+
+//static const float3x3 k2020Gamuts[15] = { k709_to_2020, kExpanded709_to_2020, kNTSC1953_to_2020, kXXB_to_2020, kXXC_to_2020, k601_to_2020, kPAL_to_2020, kNTSCJP22_to_2020, kP2280_to_2020, kAppleRGB_to_2020, kPhilips_to_2020, kP2290_to_2020, kRPTV_to_2020, kaDisplayP3_to_2020, k2020_to_2020 };
+
+static const float3x3 k2020Gamuts[29] = { kCBS1951_to_2020, kNTSC1953_to_2020, k1953RP_to_2020, k1961RP_to_2020, kXXC_to_2020, kPAL_to_2020, k601_to_2020, kNTSCJP22_to_2020, k1970sRP_to_2020, k1980sRP_to_2020, kAppleRGB_to_2020, kPhilips_to_2020, kP2280_to_2020, kP2290_to_2020, kRPTV_to_2020, kVBANDStopB_to_2020, kPSP_to_2020, k709_to_2020, kAdobeRGB1998_to_2020, kLaterDSavg_to_2020, kOGiPhone_to_2020, k709_to_2020, kaDisplayP3_to_2020, kAMOLED_to_2020, kAMOLED_to_2020, k709_to_2020, kExpanded709_to_2020, k2020_to_2020, kSwitchVivid_to_2020 };
 
 float3 LinearToST2084(float3 normalizedLinearValue)
 {
-   //float3 ST2084 = pow((0.8359375f + 18.8515625f * pow(abs(normalizedLinearValue), float3(0.1593017578f))) / (1.0f + 18.6875f * pow(abs(normalizedLinearValue), float3(0.1593017578f))), float3(78.84375f));
-   float3 ST2084 = pow((0.8359375f.xxx + (pow(abs(normalizedLinearValue), 0.1593017578125f.xxx) * 18.8515625f)) / (1.0f.xxx + (pow(abs(normalizedLinearValue), 0.1593017578125f.xxx) * 18.6875f)), 78.84375f.xxx);
+   float3 ST2084 = pow((0.8359375f.xxx + (pow(normalizedLinearValue, 0.1593017578125f.xxx) * 18.8515625f)) / (1.0f.xxx + (pow(normalizedLinearValue, 0.1593017578125f.xxx) * 18.6875f)), 78.84375f.xxx);
    return ST2084;  // Don't clamp between [0..1], so we can still perform operations on scene values higher than 10,000 nits
 }
 // END Converted from (Copyright (c) Microsoft Corporation - Licensed under the MIT License.)  https://github.com/microsoft/Xbox-ATG-Samples/tree/master/Kits/ATGTK/HDR 
@@ -1542,52 +1699,56 @@ float4 BeamControlPoints(const float beam_attack, const bool falloff)
 }
 
 float ScanlineColour(const uint channel, 
-                     const float2 tex_coord,
-                     const float2 source_size, 
-                     const float scanline_size, 
-                     const float source_tex_coord_x, 
-                     const float narrowed_source_pixel_offset, 
-                     const float vertical_convergence, 
-                     const float beam_attack, 
-                     const float scanline_min, 
-                     const float scanline_max, 
-                     const float scanline_attack, 
-                     inout float next_prev)
+                  const float2 tex_coord,
+                  const float2 source_size, 
+                  const float scanline_size, 
+                  const float source_tex_coord_x, 
+                  const float narrowed_source_pixel_offset, 
+                  const float vertical_convergence, 
+                  const float beam_attack, 
+                  const float scanline_min, 
+                  const float scanline_max, 
+                  const float scanline_attack, 
+                  const float vertical_bias) 
 {
-   const float current_source_position_y  = ((tex_coord.y * source_size.y) - vertical_convergence) + next_prev;
-   const float current_source_center_y    = floor(current_source_position_y) + 0.5f; 
-   
-   const float source_tex_coord_y         = current_source_center_y / source_size.y; 
+   float current_source_position_y  = ((tex_coord.y * source_size.y) - vertical_convergence);
 
-   const float scanline_delta             = frac(current_source_position_y) - 0.5f;
+   float center_line                = floor(current_source_position_y) + 0.5 + vertical_bias;
+   
+   float distance_to_line           = current_source_position_y - center_line;
+   
+   if (abs(distance_to_line) > 1.5) return 0.0;
+
+   float source_tex_coord_y         = center_line / source_size.y; 
+
+   float scanline_delta             = frac(current_source_position_y) - 0.5;
 
    // Slightly increase the beam width to get maximum brightness
-   float beam_distance                    = abs(scanline_delta - next_prev) - (kBeamWidth / scanline_size);
-   beam_distance                          = beam_distance < 0.0f ? 0.0f : beam_distance;
-   const float scanline_distance          = beam_distance * 2.0f;
+   float beam_distance                    = abs(scanline_delta - vertical_bias) - (kBeamWidth / scanline_size);
+   beam_distance                          = beam_distance < 0.0 ? 0.0 : beam_distance;
+   float scanline_distance          = beam_distance * 2.0;
 
-   next_prev = scanline_delta > 0.0f ? 1.0f : -1.0f;
+   float2 tex_coord_0                 = float2(source_tex_coord_x, source_tex_coord_y);
+   float2 tex_coord_1                 = float2(source_tex_coord_x + (1.0 / source_size.x), source_tex_coord_y);
 
-   const float2 tex_coord_0                 = float2(source_tex_coord_x, source_tex_coord_y);
-   const float2 tex_coord_1                 = float2(source_tex_coord_x + (1.0f / source_size.x), source_tex_coord_y);
+   float hdr_channel_0              = COMPAT_TEXTURE(SourceHDR, tex_coord_0)[channel];
+   float hdr_channel_1              = COMPAT_TEXTURE(SourceHDR, tex_coord_1)[channel];
 
-   const float sdr_channel_0              = COMPAT_TEXTURE(SourceSDR, tex_coord_0)[channel];
-   const float sdr_channel_1              = COMPAT_TEXTURE(SourceSDR, tex_coord_1)[channel];
+   // Horizontal interpolation between pixels
+   float horiz_interp               = Bezier(narrowed_source_pixel_offset, BeamControlPoints(beam_attack, hdr_channel_0 > hdr_channel_1));  
 
-   const float hdr_channel_0              = COMPAT_TEXTURE(SourceHDR, tex_coord_0)[channel];
-   const float hdr_channel_1              = COMPAT_TEXTURE(SourceHDR, tex_coord_1)[channel];
+   float hdr_channel                = lerp(hdr_channel_0, hdr_channel_1, horiz_interp);
 
-   // Horizontal interpolation between pixels 
-   const float horiz_interp               = Bezier(narrowed_source_pixel_offset, BeamControlPoints(beam_attack, sdr_channel_0 > sdr_channel_1));  
+   float physics_signal             = pow(max(hdr_channel, 0.0), 1.0 / 2.2);
 
-   const float hdr_channel                = lerp(hdr_channel_0, hdr_channel_1, horiz_interp);
-   const float sdr_channel                = lerp(sdr_channel_0, sdr_channel_1, horiz_interp);
+   float signal_strength            = clamp(physics_signal, 0.0, 2.5); 
 
-   const float channel_scanline_distance  = clamp(scanline_distance / ((sdr_channel * (scanline_max - scanline_min)) + scanline_min), 0.0f, 1.0f);
+   float beam_width                 = lerp(scanline_min, scanline_max, min(signal_strength, 1.0));
 
-   const float4 channel_control_points      = float4(1.0f, 1.0f, sdr_channel * scanline_attack,    0.0f);
+   float channel_scanline_distance  = clamp(scanline_distance / beam_width, 0.0f, 1.0f);
 
-   const float luminance                  = Bezier(channel_scanline_distance, channel_control_points);
+   float4 channel_control_points      = float4(1.0f, 1.0f, min(signal_strength, 1.0f) * scanline_attack, 0.0f);
+   float luminance                  = Bezier(channel_scanline_distance, channel_control_points);
 
    return luminance * hdr_channel;
 }
@@ -1604,72 +1765,57 @@ float GenerateScanline( const uint channel,
                         const float scanline_max, 
                         const float scanline_attack)
 {
-   const float current_source_position_x      = (tex_coord.x * source_size.x) - horizontal_convergence;
-   const float current_source_center_x        = floor(current_source_position_x) + 0.5f; 
-   
-   const float source_tex_coord_x             = current_source_center_x / source_size.x; 
+   float current_source_position_x      = (tex_coord.x * source_size.x) - horizontal_convergence;
+   float current_source_center_x        = floor(current_source_position_x) + 0.5; 
+   float source_tex_coord_x             = current_source_center_x / source_size.x; 
+   float source_pixel_offset            = frac(current_source_position_x);
+   float narrowed_source_pixel_offset   = clamp(((source_pixel_offset - 0.5) * beam_sharpness) + 0.5, 0.0, 1.0);
 
-   const float source_pixel_offset            = frac(current_source_position_x);
+   float total_light = ScanlineColour( channel, tex_coord, source_size, scanline_size, source_tex_coord_x, 
+                                       narrowed_source_pixel_offset, vertical_convergence, beam_attack, 
+                                       scanline_min, scanline_max, scanline_attack, 
+                                       0.0); 
 
-   const float narrowed_source_pixel_offset   = clamp(((source_pixel_offset - 0.5f) * beam_sharpness) + 0.5f, 0.0f, 1.0f);
+   total_light += ScanlineColour( channel, tex_coord, source_size, scanline_size, source_tex_coord_x, 
+                                 narrowed_source_pixel_offset, vertical_convergence, beam_attack, 
+                                 scanline_min, scanline_max, scanline_attack, 
+                                 1.0);
 
-   float next_prev = 0.0f;
+   total_light += ScanlineColour( channel, tex_coord, source_size, scanline_size, source_tex_coord_x, 
+                                 narrowed_source_pixel_offset, vertical_convergence, beam_attack, 
+                                 scanline_min, scanline_max, scanline_attack, 
+                                 -1.0);
 
-   const float scanline_colour0  = ScanlineColour( channel, 
-                                                   tex_coord,
-                                                   source_size, 
-                                                   scanline_size, 
-                                                   source_tex_coord_x, 
-                                                   narrowed_source_pixel_offset, 
-                                                   vertical_convergence,  
-                                                   beam_attack, 
-                                                   scanline_min, 
-                                                   scanline_max, 
-                                                   scanline_attack, 
-                                                   next_prev);
-
-   // Optionally sample the neighbouring scanline
-   float scanline_colour1 = 0.0f;
-   if(scanline_max > 1.0f)
-   {
-      scanline_colour1           = ScanlineColour( channel, 
-                                                   tex_coord,
-                                                   source_size, 
-                                                   scanline_size, 
-                                                   source_tex_coord_x, 
-                                                   narrowed_source_pixel_offset,
-                                                   vertical_convergence,  
-                                                   beam_attack, 
-                                                   scanline_min, 
-                                                   scanline_max, 
-                                                   scanline_attack,  
-                                                   next_prev);
-   }
-
-   return scanline_colour0 + scanline_colour1;
+   return total_light;
 }
 
 ////////////////////////////////////////
 
 void Downsample(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target0)
 {
-   const float2 source_size = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
-   const float2 output_size = float2(CRT_WIDTH, CRT_HEIGHT);
-
-   const float2 tile_size   = source_size / output_size;  
-
    float3 source = 0.0f.xxx;
-
-   for(float x = -(tile_size.x / 2.0f); x < tile_size.x / 2.0f; x += 1.0f)
-   {
-      for(float y = -(tile_size.y / 2.0f); y < tile_size.y / 2.0f; y += 1.0f)
+   if(HCRT_DOWNSAMPLE < 1.0f)
       {
-         float2 uv = float2(x, y) / source_size;
-         source += COMPAT_TEXTURE(ReShade::BackBuffer, texcoord + uv).rgb;
+         source = COMPAT_TEXTURE(ReShade::BackBuffer, texcoord).rgb;
       }
-   }
+      else
+      {
+         const float2 source_size = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
+         const float2 output_size = float2(CRT_WIDTH, CRT_HEIGHT);
 
-   source = source / (tile_size.x * tile_size.y);
+         const float2 tile_size   = source_size / output_size;
+
+         for(float x = -(tile_size.x / 2.0f); x < tile_size.x / 2.0f; x += 1.0f)
+         {
+            for(float y = -(tile_size.y / 2.0f); y < tile_size.y / 2.0f; y += 1.0f)
+            {
+               float2 uv = float2(x, y) / source_size;
+               source += COMPAT_TEXTURE(ReShade::BackBuffer, texcoord + uv).rgb;
+            }
+         }
+
+         source = source / (tile_size.x * tile_size.y);
+      }
 
    fragment = float4(source, 1.0);
 }
@@ -1711,7 +1857,7 @@ void HDRPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 f
 
    if((HCRT_HDR >= 1.0f) && (HCRT_COLOUR_ACCURATE < 1.0f))
    {
-      const float3 rec2020  = mul(k2020Gamuts[uint(HCRT_EXPAND_GAMUT)], hdr_colour);
+      const float3 rec2020  = mul(k2020Gamuts[uint(HCRT_CONTENT_GAMUT)], hdr_colour);
       transformed_colour  = rec2020 * (HCRT_PAPER_WHITE_NITS / kMaxNitsFor2084);
    }
    else
@@ -1722,7 +1868,7 @@ void HDRPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 f
    fragment = float4(transformed_colour, 1.0);
 }
 
-void SonyMegatronPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target0)
+void AdamantPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target0)
 {
    const float2 output_size = float2(BUFFER_WIDTH, BUFFER_HEIGHT);
    const float2 source_size = float2(CRT_WIDTH, CRT_HEIGHT);
@@ -2189,36 +2335,7 @@ void SonyMegatronPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out
 
          break;
       }
-#if ENABLE_BLACK_WHITE_MASKS
-      case kBlackWhiteMask:
-      {
-         uint mask = uint(floor(mod(current_position.x, kBlackWhiteMaskSize[(lcd_resolution * kTVLAxis) + crt_resolution])));
 
-         colour_mask = kBlackWhiteMasks[(lcd_resolution * kTVLAxis * kBGRAxis * kMaxBlackWhiteSize) + (crt_resolution * kBGRAxis * kMaxBlackWhiteSize) + (lcd_subpixel_layout * kMaxBlackWhiteSize) + mask];      
-
-         switch(lcd_resolution)
-         {
-            case k1080p:
-            { 
-               break;
-            }
-            case k4K:
-            {
-               break;
-            }
-            case k8K:
-            {
-               break;
-            }
-            default:
-            {
-               break;
-            }                 
-         }
-
-         break;
-      }
-#endif // ENABLE_BLACK_WHITE_MASKS
       default:
       {
          break;
@@ -2302,7 +2419,7 @@ void SonyMegatronPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out
    {
       if(HCRT_HDR >= 1.0f)
       {
-         const float3 rec2020  = mul(k2020Gamuts[uint(HCRT_EXPAND_GAMUT)], scanline_colour);
+         const float3 rec2020  = mul(k2020Gamuts[uint(HCRT_CONTENT_GAMUT)], scanline_colour);
          transformed_colour  = rec2020 * (HCRT_PAPER_WHITE_NITS / kMaxNitsFor2084);
       }
       else if(HCRT_OUTPUT_COLOUR_SPACE == 2.0f)
@@ -2326,10 +2443,10 @@ void SonyMegatronPass(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out
    fragment = float4(gamma_corrected, 1.0f);
 }
 
-technique SonyMegatron
+technique Adamant
 {
 	pass { VertexShader = PostProcessVS; PixelShader = Downsample; RenderTarget = SourceTexture; }
 	pass { VertexShader = PostProcessVS; PixelShader = ColourPass; RenderTarget = SDRTexture; } 
 	pass { VertexShader = PostProcessVS; PixelShader = HDRPass; RenderTarget = HDRTexture; }
-	pass { VertexShader = PostProcessVS; PixelShader = SonyMegatronPass; }
+	pass { VertexShader = PostProcessVS; PixelShader = AdamantPass; }
 }

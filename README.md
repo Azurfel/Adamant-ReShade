@@ -1,8 +1,4 @@
-# SonyMegatronReShade
-Sony Megatron shader ported from Retroarch to ReShade 
+# Adamant HDR shaders for ReShade
+CRT-Adamant is a fork of SonyMegatron-ReShade (2023.12.31) by MajorPainTheCactus, incorporating updates from the RetroArch version of CRT Adamant, itself a fork of Sony Megatron Colour Video Monitor v2.6.1 (2026.01.21) by MajorPainTheCactus.
 
-To install add a ReShade effect search path to point to the root directory of this repository on your local hard disk. 
-
-You will also need to place the preset ini files in the root directory of the game (unless anybody knows of a different way to get ReShade to read the presets).
-
-This effect should be used in conjunction with my AutoHDR ReShade addon which can also be found on my GitHub site. 
+This effect should be used in conjunction with MajorPainTheCactus' AutoHDR ReShade addon.
